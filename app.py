@@ -1,176 +1,232 @@
 import streamlit as st
 import os
 import json
-from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
+
+st.set_page_config(page_title="Ice Cream App", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RECIPES_PATH = os.path.join(BASE_DIR, "recipes.json")
 
-def _recipes_mtime(path: str) -> float:
+RECIPES_PATH      = os.path.join(BASE_DIR, "recipes.json")
+LINEUP_FILE       = os.path.join(BASE_DIR, "weekly_lineup.json")
+INVENTORY_FILE    = os.path.join(BASE_DIR, "inventory.json")
+INGREDIENT_FILE   = os.path.join(BASE_DIR, "ingredient_inventory.json")
+THRESHOLD_FILE    = os.path.join(BASE_DIR, "ingredient_thresholds.json")
+EXCLUDE_FILE      = os.path.join(BASE_DIR, "excluded_ingredients.json")
+
+UNIT_OPTIONS = ["cans", "50lbs bags", "grams", "liters", "gallons"]
+
+def _mtime(path: str) -> float:
     try:
         return os.path.getmtime(path)
     except FileNotFoundError:
         return 0.0
 
 @st.cache_data(ttl=60)
-def load_recipes(path: str, mtime: float):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-mtime = _recipes_mtime(RECIPES_PATH)
-
-if not os.path.exists(RECIPES_PATH):
-    st.error(f"Missing recipes file: {RECIPES_PATH}")
-    st.info("Fix: add recipes.json to the repo (same folder as app.py) or update RECIPES_PATH.")
-    st.stop()
-
-recipes = load_recipes(RECIPES_PATH, mtime)
-
-
-# st.write("CWD:", os.getcwd())
-# st.write("Files in CWD:", os.listdir("."))
-
-RECIPES_PATH = "recipes.json"  # <-- change if your file is elsewhere
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RECIPES_PATH = os.path.join(BASE_DIR, "recipes.json")
-
-def _recipes_mtime(path: str) -> float:
-    try:
-        return os.path.getmtime(path)
-    except FileNotFoundError:
-        return 0.0
-
-@st.cache_data(ttl=60)
-def load_recipes(path: str, mtime: float):
-    # mtime is ONLY here to bust the cache when the file changes
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-mtime = _recipes_mtime(RECIPES_PATH)
-recipes = load_recipes(RECIPES_PATH, mtime)
-
-# st.write("RECIPES_PATH:", RECIPES_PATH)
-# st.write("Exists?", os.path.exists(RECIPES_PATH))
-# if os.path.exists(RECIPES_PATH):
-#     st.write("Modified:", os.path.getmtime(RECIPES_PATH))
-#     st.write("Size:", os.path.getsize(RECIPES_PATH))
-####
-
-# --- File Constants ---
-LINEUP_FILE = "weekly_lineup.json"
-INVENTORY_FILE = "inventory.json"
-INGREDIENT_FILE = "ingredient_inventory.json"
-THRESHOLD_FILE = "ingredient_thresholds.json"
-EXCLUDE_FILE = "excluded_ingredients.json"
-
-# Helpers for inventory 
-# Canonical unit keys to avoid typos in saved JSON
-UNIT_OPTIONS = [
-    "cans",
-    "50lbs bags",   # keep exact label you requested
-    "grams",
-    "liters",
-    "gallons",
-]
-
-def load_json(path: str, default):
+def load_json_cached(path: str, mtime: float, default: Any):
+    # mtime exists only to bust cache when file changes
     if not os.path.exists(path):
         return default
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def load_json(path: str, default: Any):
     try:
-        with open(path, "r") as f:
-            return json.load(f)
-    except Exception:
-        return default
+        return load_json_cached(path, _mtime(path), default)
+    except json.JSONDecodeError as e:
+        st.error(f"❌ Invalid JSON: {os.path.basename(path)}")
+        st.caption(f"Error: {e.msg} at line {e.lineno}, column {e.colno}")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Failed reading {os.path.basename(path)}: {e}")
+        st.stop()
 
 def save_json(path: str, data: Any):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-def get_all_ingredients_from_recipes(recipes: Dict[str, Any]) -> list[str]:
-    names = set()
-    for r in recipes.values():
-        for ing in r.get("ingredients", {}).keys():
-            names.add(ing)
-    return sorted(names)
-
-def normalize_thresholds_schema(thresholds: Dict[str, Any]) -> Dict[str, Any]:
-    """Upgrade old schema (value-only) to {'min': number, 'unit': 'grams'}."""
-    upgraded = {}
-    for ing, val in thresholds.items():
-        if isinstance(val, dict):
-            # ensure both keys
-            min_val = val.get("min", 0)
-            unit    = val.get("unit", "grams")
-            if unit not in UNIT_OPTIONS:
-                unit = "grams"
-            upgraded[ing] = {"min": min_val, "unit": unit}
-        else:
-            upgraded[ing] = {"min": float(val) if val is not None else 0.0, "unit": "grams"}
-    return upgraded
-
-##
-
-
-# --- Helpers ---
-
-
-def get_all_ingredients(recipes: dict) -> list[str]:
-    seen = set()
-    for r in recipes.values():
-        for ing in r.get("ingredients", {}).keys():
-            seen.add(ing.strip())
-    return sorted(seen)
-
-UNIT_FACTORS = {"g": 1.0, "kg": 1000.0, "lb": 453.59237, "oz": 28.349523125}
-
-def load_json(path: str, default):
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                return default
-    return default
-
-def save_json(path: str, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def normalize_inventory_schema(raw: dict) -> tuple[dict, bool]:
-    inv, changed = {}, False
-    for k, v in (raw or {}).items():
-        if isinstance(v, dict):
-            amt = float(v.get("amount", 0))
-            unit = (v.get("unit") or "g").lower()
-        else:
-            amt = float(v or 0)
-            unit = "g"
-            changed = True
-        inv[k] = {"amount": amt, "unit": unit}
-    return inv, changed
+# --- Load recipes (hard requirement) ---
+if not os.path.exists(RECIPES_PATH):
+    st.error(f"Missing recipes file: {RECIPES_PATH}")
+    st.info("Fix: add recipes.json to the repo (same folder as app.py).")
+    st.stop()
+
+recipes: Dict[str, Any] = load_json(RECIPES_PATH, default={})
+
+# import streamlit as st
+# import os
+# import json
+# from datetime import datetime
+# from typing import Any, Dict, List
+
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# RECIPES_PATH = os.path.join(BASE_DIR, "recipes.json")
+
+# def _recipes_mtime(path: str) -> float:
+#     try:
+#         return os.path.getmtime(path)
+#     except FileNotFoundError:
+#         return 0.0
+
+# @st.cache_data(ttl=60)
+# def load_recipes(path: str, mtime: float):
+#     with open(path, "r", encoding="utf-8") as f:
+#         return json.load(f)
+
+# mtime = _recipes_mtime(RECIPES_PATH)
+
+# if not os.path.exists(RECIPES_PATH):
+#     st.error(f"Missing recipes file: {RECIPES_PATH}")
+#     st.info("Fix: add recipes.json to the repo (same folder as app.py) or update RECIPES_PATH.")
+#     st.stop()
+
+# recipes = load_recipes(RECIPES_PATH, mtime)
 
 
-def to_grams(amount: float, unit: str) -> float:
-    return float(amount) * UNIT_FACTORS.get((unit or "g").lower(), 1.0)
+# # st.write("CWD:", os.getcwd())
+# # st.write("Files in CWD:", os.listdir("."))
 
-def ensure_inventory_files(recipes: dict):
-    """If files don't exist, initialize from recipes."""
-    all_ings = get_all_ingredients(recipes)
+# RECIPES_PATH = "recipes.json"  # <-- change if your file is elsewhere
+# import os
 
-    # Create inventory file if missing (all zeros)
-    if not os.path.exists(INGREDIENT_FILE):
-        inventory = {ing: 0 for ing in all_ings}
-        save_json(INGREDIENT_FILE, inventory)
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# RECIPES_PATH = os.path.join(BASE_DIR, "recipes.json")
 
-    # Create thresholds file if missing (all zeros)
-    if not os.path.exists(THRESHOLD_FILE):
-        thresholds = {ing: 0 for ing in all_ings}
-        save_json(THRESHOLD_FILE, thresholds)
+# def _recipes_mtime(path: str) -> float:
+#     try:
+#         return os.path.getmtime(path)
+#     except FileNotFoundError:
+#         return 0.0
+
+# @st.cache_data(ttl=60)
+# def load_recipes(path: str, mtime: float):
+#     # mtime is ONLY here to bust the cache when the file changes
+#     with open(path, "r", encoding="utf-8") as f:
+#         return json.load(f)
+
+# mtime = _recipes_mtime(RECIPES_PATH)
+# recipes = load_recipes(RECIPES_PATH, mtime)
+
+# # st.write("RECIPES_PATH:", RECIPES_PATH)
+# # st.write("Exists?", os.path.exists(RECIPES_PATH))
+# # if os.path.exists(RECIPES_PATH):
+# #     st.write("Modified:", os.path.getmtime(RECIPES_PATH))
+# #     st.write("Size:", os.path.getsize(RECIPES_PATH))
+# ####
+
+# # --- File Constants ---
+# LINEUP_FILE = "weekly_lineup.json"
+# INVENTORY_FILE = "inventory.json"
+# INGREDIENT_FILE = "ingredient_inventory.json"
+# THRESHOLD_FILE = "ingredient_thresholds.json"
+# EXCLUDE_FILE = "excluded_ingredients.json"
+
+# # Helpers for inventory 
+# # Canonical unit keys to avoid typos in saved JSON
+# UNIT_OPTIONS = [
+#     "cans",
+#     "50lbs bags",   # keep exact label you requested
+#     "grams",
+#     "liters",
+#     "gallons",
+# ]
+
+# def load_json(path: str, default):
+#     if not os.path.exists(path):
+#         return default
+#     try:
+#         with open(path, "r") as f:
+#             return json.load(f)
+#     except Exception:
+#         return default
+
+# def save_json(path: str, data: Any):
+#     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+#     with open(path, "w") as f:
+#         json.dump(data, f, indent=2)
+
+# def get_all_ingredients_from_recipes(recipes: Dict[str, Any]) -> list[str]:
+#     names = set()
+#     for r in recipes.values():
+#         for ing in r.get("ingredients", {}).keys():
+#             names.add(ing)
+#     return sorted(names)
+
+# def normalize_thresholds_schema(thresholds: Dict[str, Any]) -> Dict[str, Any]:
+#     """Upgrade old schema (value-only) to {'min': number, 'unit': 'grams'}."""
+#     upgraded = {}
+#     for ing, val in thresholds.items():
+#         if isinstance(val, dict):
+#             # ensure both keys
+#             min_val = val.get("min", 0)
+#             unit    = val.get("unit", "grams")
+#             if unit not in UNIT_OPTIONS:
+#                 unit = "grams"
+#             upgraded[ing] = {"min": min_val, "unit": unit}
+#         else:
+#             upgraded[ing] = {"min": float(val) if val is not None else 0.0, "unit": "grams"}
+#     return upgraded
+
+# ##
+
+
+# # --- Helpers ---
+
+
+# def get_all_ingredients(recipes: dict) -> list[str]:
+#     seen = set()
+#     for r in recipes.values():
+#         for ing in r.get("ingredients", {}).keys():
+#             seen.add(ing.strip())
+#     return sorted(seen)
+
+# UNIT_FACTORS = {"g": 1.0, "kg": 1000.0, "lb": 453.59237, "oz": 28.349523125}
+
+# def load_json(path: str, default):
+#     if os.path.exists(path):
+#         with open(path, "r", encoding="utf-8") as f:
+#             try:
+#                 with open(path, "r", encoding="utf-8") as f:
+#                     return json.load(f)
+#             except json.JSONDecodeError:
+#                 return default
+#     return default
+
+# def save_json(path: str, data):
+#     with open(path, "w", encoding="utf-8") as f:
+#         json.dump(data, f, indent=2, ensure_ascii=False)
+
+# def normalize_inventory_schema(raw: dict) -> tuple[dict, bool]:
+#     inv, changed = {}, False
+#     for k, v in (raw or {}).items():
+#         if isinstance(v, dict):
+#             amt = float(v.get("amount", 0))
+#             unit = (v.get("unit") or "g").lower()
+#         else:
+#             amt = float(v or 0)
+#             unit = "g"
+#             changed = True
+#         inv[k] = {"amount": amt, "unit": unit}
+#     return inv, changed
+
+
+# def to_grams(amount: float, unit: str) -> float:
+#     return float(amount) * UNIT_FACTORS.get((unit or "g").lower(), 1.0)
+
+# def ensure_inventory_files(recipes: dict):
+#     """If files don't exist, initialize from recipes."""
+#     all_ings = get_all_ingredients(recipes)
+
+#     # Create inventory file if missing (all zeros)
+#     if not os.path.exists(INGREDIENT_FILE):
+#         inventory = {ing: 0 for ing in all_ings}
+#         save_json(INGREDIENT_FILE, inventory)
+
+#     # Create thresholds file if missing (all zeros)
+#     if not os.path.exists(THRESHOLD_FILE):
+#         thresholds = {ing: 0 for ing in all_ings}
+#         save_json(THRESHOLD_FILE, thresholds)
 
 
 # # --- Recipe Database ---
