@@ -1,0 +1,15 @@
+{
+  "Vanilla Base": {
+    "ingredients": {
+      "milk": 1000,
+      "cream": 400,
+      "sugar": 200
+    },
+    "instruction": [
+      "Mix ingredients",
+      "Pasteurize",
+      "Cool and age"
+    ],
+    "subrecipes": {}
+  }
+}
