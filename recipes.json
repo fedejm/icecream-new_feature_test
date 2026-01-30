@@ -11,35 +11,33 @@
       "Cool and age"
     ],
     "subrecipes": {}
-  }, 
+  },
 
-    "Black Sesame": {
+  "Black Sesame": {
+    "ingredients": {
+      "milk": 10356,
+      "cream": 3600,
+      "sugar": 3200,
+      "guar": 44,
+      "dry milk": 1000,
+      "yolks": 800,
+      "black sesame paste": 1000
+    },
+    "instruction": [
+      "1) Weigh and mix all base ingredients except black sesame paste.",
+      "2) Add the black sesame paste to 3 quarts of mix on the table blender and blend until the black sesame is finely ground and homogeneous."
+    ],
+    "subrecipes": {
+      "black sesame paste": {
         "ingredients": {
-            "milk": 10356,
-            "cream": 3600,
-            "sugar": 3200,
-            "guar": 44,
-            "dry milk": 1000,
-            "yolks": 800,
-            "black sesame paste": 1000,
+          "black sesame": 900,
+          "sesame oil": 100
         },
         "instruction": [
-            "1) Weigh and mix all base ingredients except black sesame paste.",
-            "2) Add the black sesame paste to 3 quarts of mix on the table blender and blend until the black sesame is finely ground and homogeneous.",
-            
-        ],
-        "subrecipes": {
-            "black sesame paste": {
-                "ingredients": {
-                    "black sesame": 900,
-                    "sesame oil": 100,
-                },
-                "instruction": [
-                    "1) Slightly roast the black sesame seeds on the pan at medium heat.",
-                    "2) On the robocoupe processor, process the seeds and oil until you have a paste.",
-                    
-                ],
-            }
-        },
+          "1) Slightly roast the black sesame seeds on the pan at medium heat.",
+          "2) On the robocoupe processor, process the seeds and oil until you have a paste."
+        ]
+      }
     }
+  }
 }
