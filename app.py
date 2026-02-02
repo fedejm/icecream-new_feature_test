@@ -59,7 +59,28 @@ def ns_key(ns: str, name: str) -> str:
 
 def to_grams(amount: float, unit: str) -> float:
     return float(amount) * UNIT_FACTORS.get((unit or "g").lower(), 1.0)
+###
+def scale_subrecipes(subrecipes: dict, scale_factor: float) -> dict:
+    """Return a scaled copy of subrecipes (ingredients scaled, instructions unchanged)."""
+    scaled_subs = {}
+    for sname, srec in (subrecipes or {}).items():
+        if not isinstance(srec, dict):
+            continue
+        base_ings = (srec.get("ingredients") or {})
+        new_ings = {}
+        for ing, qty in base_ings.items():
+            try:
+                new_ings[ing] = round(float(qty) * scale_factor, 2)
+            except Exception:
+                # keep non-numeric as-is
+                new_ings[ing] = qty
 
+        scaled_subs[sname] = {
+            "ingredients": new_ings,
+            "instruction": (srec.get("instruction") or []),
+        }
+    return scaled_subs
+###
 
 # =========================
 # Recipe schema normalizer
@@ -183,13 +204,26 @@ def render_subrecipes(subrecipes: dict):
                         st.write(f"- {k}: {v}")
             render_instructions("Instructions", (srec or {}).get("instruction", []) or [])
 
-def show_scaled_result(selected_name: str, scaled_ingredients: dict, recipes_dict: dict):
+# def show_scaled_result(selected_name: str, scaled_ingredients: dict, recipes_dict: dict):
+#     base = recipes_dict.get(selected_name, {}) or {}
+#     rec = {
+#         "ingredients": scaled_ingredients or {},
+#         "instruction": base.get("instruction", []) or [],
+#         "subrecipes": base.get("subrecipes", {}) or {},
+#     }
+#     render_ingredients_block(rec.get("ingredients", {}))
+#     render_instructions("🛠️ Instructions", rec.get("instruction", []))
+#     render_subrecipes(rec.get("subrecipes", {}))
+
+def show_scaled_result(selected_name: str, scaled_ingredients: dict, recipes_dict: dict, scale_factor: float):
     base = recipes_dict.get(selected_name, {}) or {}
+
     rec = {
         "ingredients": scaled_ingredients or {},
         "instruction": base.get("instruction", []) or [],
-        "subrecipes": base.get("subrecipes", {}) or {},
+        "subrecipes": scale_subrecipes(base.get("subrecipes", {}) or {}, scale_factor),
     }
+
     render_ingredients_block(rec.get("ingredients", {}))
     render_instructions("🛠️ Instructions", rec.get("instruction", []))
     render_subrecipes(rec.get("subrecipes", {}))
@@ -358,7 +392,8 @@ def page_batching():
         st.caption(line)
 
     st.divider()
-    show_scaled_result(selected_name, scaled, recipes)
+    #show_scaled_result(selected_name, scaled, recipes)
+    show_scaled_result(selected_name, scaled, recipes, scale_factor)
 
     st.divider()
     st.subheader("Execute batch (step-by-step)")
